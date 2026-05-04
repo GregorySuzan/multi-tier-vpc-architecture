@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-# multi-tier-vpc-architecture
-A 3-tier network architecture built from scratch on AWS
-=======
 # 🌐 Multi-Tier VPC Architecture — AWS SAA Portfolio Project
 
 ![AWS](https://img.shields.io/badge/AWS-VPC-FF9900?style=flat&logo=amazonaws&logoColor=white)
@@ -26,55 +22,9 @@ Built twice: first manually via the AWS Console to understand every component, t
 
 ## 🏗️ Architecture
 
-```
-  INTERNET
-     │
-     │ HTTP/HTTPS
-     ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                  AWS CLOUD — us-east-1                          │
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │          VPC: multi-tier-vpc  (10.0.0.0/16)             │   │
-│  │                                                          │   │
-│  │  ── TIER 1: PUBLIC (Web Layer) ────────────────────────  │   │
-│  │                                                          │   │
-│  │  public-subnet-1a         public-subnet-1b               │   │
-│  │  10.0.1.0/24 (1a)         10.0.4.0/24 (1b)              │   │
-│  │                                                          │   │
-│  │  [Internet Gateway] ← only route to internet            │   │
-│  │  [ALB] ← accepts HTTP/HTTPS from 0.0.0.0/0              │   │
-│  │  [Bastion Host] ← SSH from My IP only                   │   │
-│  │  [NAT Gateway] ← gives private subnets outbound         │   │
-│  │                                                          │   │
-│  │  ── TIER 2: PRIVATE (App Layer) ───────────────────────  │   │
-│  │                                                          │   │
-│  │  private-app-1a           private-app-1b                 │   │
-│  │  10.0.2.0/24 (1a)         10.0.5.0/24 (1b)              │   │
-│  │                                                          │   │
-│  │  [EC2 app-server-1a]      [EC2 app-server-1b]           │   │
-│  │   Nginx | no public IP     Nginx | no public IP          │   │
-│  │   Outbound: NAT GW only    SSM Session Manager           │   │
-│  │                                                          │   │
-│  │  ── TIER 3: PRIVATE (Data Layer) ──────────────────────  │   │
-│  │                                                          │   │
-│  │  private-data-1a          private-data-1b                │   │
-│  │  10.0.3.0/24 (1a)         10.0.6.0/24 (1b)              │   │
-│  │                                                          │   │
-│  │  [RDS MySQL 8.0]                                         │   │
-│  │   Encrypted | No internet access                         │   │
-│  │   Port 3306 from app tier ONLY                           │   │
-│  │                                                          │   │
-│  │  ── SECURITY LAYERS ────────────────────────────────────  │   │
-│  │                                                          │   │
-│  │  Security Groups: sg-alb → sg-app → sg-rds (chained)    │   │
-│  │  NACLs: public-nacl / private-app-nacl / private-data    │   │
-│  │  VPC Flow Logs: ALL traffic → S3 → queryable via Athena  │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-```
+![Architecture Diagram](architecture-diagram.png)
 
-> 📐 Full draw.io diagram: [`docs/Architecture-diagram.png`](docs/Architecture-diagram.png)
+> 📐 Built with eraser.io
 
 ---
 
@@ -323,4 +273,3 @@ Deletes all resources in the correct order automatically. Takes ~10 minutes.
 
 **Gregory Suzan** — Cloud Engineer | AWS SAA Candidate | Ex-Graphic Designer
 📍 Brisbane, Australia | [GitHub](https://github.com/GregorySuzan)
->>>>>>> b039809 (Complete 3-Tier Architecture with Flow Logs and Athena)
