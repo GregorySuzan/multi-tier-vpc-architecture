@@ -1,0 +1,273 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Multi-Tier VPC Architecture - 3 tiers (Public, Private App, Private Data) | SSM Only | SAA Portfolio
+
+Parameters:
+  MyIPAddress:
+    Type: String
+    Description: Your public IP in CIDR format (e.g. 1.2.3.4/32)
+  DBPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    Default: Portfolio123!
+
+Resources:
+  # VPC
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: multi-tier-vpc
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: multi-tier-igw
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # Subnets
+  PublicSubnet1a: { Type: AWS::EC2::Subnet, Properties: { VpcId: !Ref VPC, CidrBlock: 10.0.1.0/24, AvailabilityZone: !Select [0, !GetAZs ''], MapPublicIpOnLaunch: true, Tags: [{Key: Name, Value: public-subnet-1a}] }}
+  PublicSubnet1b: { Type: AWS::EC2::Subnet, Properties: { VpcId: !Ref VPC, CidrBlock: 10.0.4.0/24, AvailabilityZone: !Select [1, !GetAZs ''], MapPublicIpOnLaunch: true, Tags: [{Key: Name, Value: public-subnet-1b}] }}
+
+  PrivateAppSubnet1a: { Type: AWS::EC2::Subnet, Properties: { VpcId: !Ref VPC, CidrBlock: 10.0.2.0/24, AvailabilityZone: !Select [0, !GetAZs ''], Tags: [{Key: Name, Value: private-app-1a}] }}
+  PrivateAppSubnet1b: { Type: AWS::EC2::Subnet, Properties: { VpcId: !Ref VPC, CidrBlock: 10.0.5.0/24, AvailabilityZone: !Select [1, !GetAZs ''], Tags: [{Key: Name, Value: private-app-1b}] }}
+
+  PrivateDataSubnet1a: { Type: AWS::EC2::Subnet, Properties: { VpcId: !Ref VPC, CidrBlock: 10.0.3.0/24, AvailabilityZone: !Select [0, !GetAZs ''], Tags: [{Key: Name, Value: private-data-1a}] }}
+  PrivateDataSubnet1b: { Type: AWS::EC2::Subnet, Properties: { VpcId: !Ref VPC, CidrBlock: 10.0.6.0/24, AvailabilityZone: !Select [1, !GetAZs ''], Tags: [{Key: Name, Value: private-data-1b}] }}
+
+  # NAT Gateway
+  NatEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEIP.AllocationId
+      SubnetId: !Ref PublicSubnet1a
+      Tags:
+        - Key: Name
+          Value: multi-tier-nat
+
+  # Route Tables
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: public-rt
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  # Associate Public Subnets
+  PublicSubnet1aRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1a
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet1bRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1b
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateAppRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: private-app-rt
+
+  PrivateAppRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateAppRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateAppSubnet1aRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateAppSubnet1a
+      RouteTableId: !Ref PrivateAppRouteTable
+
+  PrivateAppSubnet1bRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateAppSubnet1b
+      RouteTableId: !Ref PrivateAppRouteTable
+
+  PrivateDataRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: private-data-rt
+
+  PrivateDataSubnet1aRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateDataSubnet1a
+      RouteTableId: !Ref PrivateDataRouteTable
+
+  PrivateDataSubnet1bRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateDataSubnet1b
+      RouteTableId: !Ref PrivateDataRouteTable
+
+  # Security Groups (SSM Only)
+  SGAlb:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ALB Security Group
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  SGApp:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: App Servers - HTTP from ALB + SSM
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref SGAlb
+
+  SGRDS:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RDS - MySQL from App tier only
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref SGApp
+
+  # IAM Role for SSM
+  EC2SSMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2SSMRole
+
+  # ALB + Target Group + Listener (simplified)
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      SecurityGroups: [!Ref SGAlb]
+      Subnets: [!Ref PublicSubnet1a, !Ref PublicSubnet1b]
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 80
+      Protocol: HTTP
+      VpcId: !Ref VPC
+      TargetType: instance
+
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+  # App Servers (Nginx)
+  AppServer1a:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0533f2ba8a1995cf9
+      InstanceType: t3.micro
+      SubnetId: !Ref PrivateAppSubnet1a
+      SecurityGroupIds: [!Ref SGApp]
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      Tags:
+        - Key: Name
+          Value: app-server-1a
+
+  AppServer1b:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0533f2ba8a1995cf9
+      InstanceType: t3.micro
+      SubnetId: !Ref PrivateAppSubnet1b
+      SecurityGroupIds: [!Ref SGApp]
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      Tags:
+        - Key: Name
+          Value: app-server-1b
+
+  # RDS
+  RDSSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Private Data Tier
+      SubnetIds: [!Ref PrivateDataSubnet1a, !Ref PrivateDataSubnet1b]
+
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceClass: db.t3.micro
+      Engine: mysql
+      EngineVersion: '8.0'
+      MasterUsername: admin
+      MasterUserPassword: !Ref DBPassword
+      AllocatedStorage: 20
+      StorageEncrypted: true
+      PubliclyAccessible: false
+      VPCSecurityGroups: [!Ref SGRDS]
+      DBSubnetGroupName: !Ref RDSSubnetGroup
+
+Outputs:
+  ALBDNSName:
+    Description: ALB DNS Name
+    Value: !GetAtt ALB.DNSName
+
+  RDSEndpoint:
+    Description: RDS Endpoint
+    Value: !GetAtt RDSInstance.Endpoint.Address
